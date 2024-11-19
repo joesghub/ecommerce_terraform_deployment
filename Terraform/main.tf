@@ -7,7 +7,7 @@ provider "aws" {
 
 
 
-
+## VPCS ##
 # Custom VPC wl5vpc
 resource "aws_vpc" "main" {
   cidr_block       = "10.0.0.0/16"
@@ -15,6 +15,27 @@ resource "aws_vpc" "main" {
 
   tags = {
     Name = "wl5vpc"
+  }
+}
+
+resource "aws_vpc" "default" {
+  cidr_block       = "10.0.0.0/16"
+  instance_tenancy = "default"
+
+  tags = {
+    Name = "Monitoring"
+  }
+}
+
+
+
+resource "aws_vpc_peering_connection" "vpc_peer" {
+  peer_vpc_id   = aws_vpc.default.id
+  vpc_id        = aws_vpc.main.id
+  auto_accept   = true
+
+  tags = {
+    Name = "VPC Peering between wl5vpc and default"
   }
 }
 
