@@ -28,10 +28,9 @@ resource "aws_vpc" "default" {
 }
 
 
-
 resource "aws_vpc_peering_connection" "vpc_peer" {
-  peer_vpc_id   = aws_vpc.default.id
-  vpc_id        = aws_vpc.main.id
+  peer_vpc_id   = aws_vpc.main.id
+  vpc_id        = aws_vpc.default.id
   auto_accept   = true
 
   tags = {
@@ -39,6 +38,18 @@ resource "aws_vpc_peering_connection" "vpc_peer" {
   }
 }
 
+
+# Data source to access the default route table of the default VPC
+data "aws_route_table" "default" {
+  vpc_id = aws_vpc.default.id
+}
+
+# Add a route for VPC peering to the default route table
+resource "aws_route" "vpc_peering_route" {
+  route_table_id            = data.aws_route_table.default.id
+  destination_cidr_block    = aws_vpc.main.cidr_block  # Adjust based on peer VPC
+  vpc_peering_connection_id  = aws_vpc_peering_connection.vpc_peer.id
+}
 
 
 
@@ -114,6 +125,13 @@ resource "aws_security_group" "frontend_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  
+  ingress {
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   # Egress rules: Define outbound traffic that is allowed. The below configuration allows all outbound traffic from the instance.
   egress {
@@ -148,6 +166,14 @@ resource "aws_security_group" "backend_sg" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  ingress {
+    from_port   = 9100
+    to_port     = 9100
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
 
   # Egress rules: Define outbound traffic that is allowed. The below configuration allows all outbound traffic from the instance.
   egress {
@@ -220,6 +246,21 @@ resource "aws_nat_gateway" "nat_gw" {
   }
 }
 
+# ELASTIC IP 2
+resource "aws_eip" "sticky_ip_2" {
+  domain = "vpc"
+}
+# NAT GATEWAY 2
+resource "aws_nat_gateway" "nat_gw_2" {
+  allocation_id = aws_eip.sticky_ip.id
+  subnet_id     = aws_subnet.public_1b.id
+  depends_on    = [aws_internet_gateway.igw]
+
+  tags = {
+    Name = "NAT Gateway 2"
+  }
+}
+
 
 
 
@@ -231,6 +272,11 @@ resource "aws_route_table" "public" {
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.igw.id
+  }
+
+  route {
+    cidr_block = data.aws_vpc.default.cidr_block
+    vpc_peering_connection_id = aws_vpc_peering_connection.vpc_peer.id
   }
 
   tags = {
@@ -254,6 +300,11 @@ resource "aws_route_table" "private" {
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_nat_gateway.nat_gw.id
+  }
+
+  route {
+    cidr_block = data.aws_vpc.default.cidr_block
+    vpc_peering_connection_id = aws_vpc_peering_connection.vpc_peer.id
   }
 
   tags = {
